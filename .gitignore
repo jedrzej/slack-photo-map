@@ -1,0 +1,17 @@
+# Package directories
+node_modules
+
+# Serverless directories
+.serverless
+
+# IDE
+.idea
+
+# Build files
+.webpack
+
+# Configuration
+serverless.env.yml
+
+# Other
+tmp
