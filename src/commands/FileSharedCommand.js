@@ -1,5 +1,8 @@
 'use strict';
 
+import request from 'request';
+import {ExifImage} from 'exif';
+
 export default class {
   constructor(slack, usersService) {
     this.usersService = usersService;
@@ -14,6 +17,12 @@ export default class {
       console.log('Processing payload', payload);
       await this.ensureUserExists(payload.event.user_id);
       const file = await this.getFile(payload.event.file_id);
+      if (file.file.mimetype !== 'image/jpeg') {
+        console.log('Unsupported mime type', file.file.mimetype);
+        return;
+      }
+      
+      const exifData = await this.loadExifData(file);
     });
   }
 
@@ -62,5 +71,53 @@ export default class {
     }
 
     return file;
+  }
+
+  async loadExifData(file) {
+    let buffer;
+    try {
+      console.log('Downloading file from', file.file.url_private);
+      buffer = await this._request(file.file.url_private);
+    } catch (e) {
+      console.error('Unable to download file', e);
+      throw e;
+    }
+
+    try {
+      console.log('Loading EXIF data');
+      new ExifImage({image: buffer}, function (error, exifData) {
+        if (error) {
+          throw error;
+        }
+        else {
+          console.log('Loaded EXIF data', exifData);
+          return exifData;
+        }
+      });
+    } catch (e) {
+      console.error('Unable to load EXIF data', e);
+      throw e;
+    }
+
+  }
+
+  _request(url) {
+    const options = {
+      encoding: null,
+      headers: {
+        'Authorization': 'Bearer ' + process.env.OAUTH_ACCESS_TOKEN
+      },
+      url
+    };
+
+    return new Promise(function (resolve, reject) {
+      request(options, function (error, res, body) {
+        if (!error && res.statusCode === 200) {
+          resolve(body);
+        } else {
+          reject(error);
+        }
+      });
+    });
   }
 }

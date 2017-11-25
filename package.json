@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "babel-runtime": "^6.26.0",
+    "exif": "^0.6.0",
     "serverless-slack": "^1.0.26"
   }
 }
