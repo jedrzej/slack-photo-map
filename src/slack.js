@@ -1,22 +1,9 @@
 'use strict';
 
-export function handler(event, context, callback) {
-  const body = JSON.parse(event.body);
-  console.log("BODY\n", body);
+import slack from "serverless-slack";
 
-  if (body.token !== process.env.SLACK_VERIFICATION_TOKEN) {
-    console.log("FORBIDDEN");
-    return callback(null, {
-      statusCode: 403,
-      body: 'Forbidden'
-    });
-  }
+import FileSharedCommand from './commands/FileSharedCommand';
 
-  const response = {
-    statusCode: 200,
-    body: 'OK'
-  };
+new FileSharedCommand(slack);
 
-  console.log("RESPONSE\n", response);
-  callback(null, response);
-}
+export const handler = slack.handler.bind(slack);
