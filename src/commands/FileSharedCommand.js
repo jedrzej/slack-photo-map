@@ -2,10 +2,13 @@
 
 import request from 'request';
 import {ExifImage} from 'exif';
+import moment from 'moment';
 
 export default class {
-  constructor(slack, usersService) {
+  constructor(slack, usersService, filesService) {
     this.usersService = usersService;
+    this.filesService = filesService;
+
     slack.on('event', async (payload, client) => {
       this.client = client;
 
@@ -15,14 +18,20 @@ export default class {
       }
 
       console.log('Processing payload', payload);
-      await this.ensureUserExists(payload.event.user_id);
+      const userData = await this.ensureUserExists(payload.event.user_id);
       const file = await this.getFile(payload.event.file_id);
       if (file.file.mimetype !== 'image/jpeg') {
         console.log('Unsupported mime type', file.file.mimetype);
         return;
       }
-      
-      const exifData = await this.loadExifData(file);
+
+      const buffer = await this.loadFileContent(file);
+      const exifData = await this.loadExifData(buffer);
+      if (this.hasRequiredData(exifData)) {
+        this.storeFile(file, exifData, userData);
+      } else {
+        console.log('Required EXIF data is missing')
+      }
     });
   }
 
@@ -52,8 +61,12 @@ export default class {
       };
 
       console.log('Saving user data', userData);
-      return this.usersService.put(userData);
+      await this.usersService.put(userData);
+
+      return userData;
     }
+
+    return user;
   }
 
   async getFile(fileId) {
@@ -73,32 +86,60 @@ export default class {
     return file;
   }
 
-  async loadExifData(file) {
-    let buffer;
+  async loadFileContent(file) {
     try {
       console.log('Downloading file from', file.file.url_private);
-      buffer = await this._request(file.file.url_private);
+      return await this._request(file.file.url_private);
     } catch (e) {
       console.error('Unable to download file', e);
       throw e;
     }
+  }
 
-    try {
+  loadExifData(buffer) {
+    return new Promise(function (resolve, reject) {
       console.log('Loading EXIF data');
       new ExifImage({image: buffer}, function (error, exifData) {
         if (error) {
-          throw error;
-        }
-        else {
+          console.error('Unable to load EXIF data', e);
+          reject(error);
+        } else {
           console.log('Loaded EXIF data', exifData);
-          return exifData;
+          resolve(exifData);
         }
       });
-    } catch (e) {
-      console.error('Unable to load EXIF data', e);
-      throw e;
+    });
+  }
+
+  hasRequiredData(exifData) {
+    return exifData.exif.CreateDate && exifData.gps.GPSLatitudeRef;
+  }
+
+  storeFile(file, exifData, user) {
+    let lat = this._calculateDecimalCoordinate(exifData.gps.GPSLatitude, exifData.gps.GPSLatitudeRef);
+    let lng = this._calculateDecimalCoordinate(exifData.gps.GPSLongitude, exifData.gps.GPSLongitudeRef);
+
+    const fileData = {
+      id: file.file.id,
+      url: file.file.url_private,
+      thumbnailUrl: file.file.thumb_80,
+      createdAt: moment(exifData.exif.CreateDate, "YYYY:MM:DD").format('YYYY-MM-DD'),
+      lat,
+      lng,
+      user
+    };
+
+    console.log('Saving file ', fileData);
+    return this.filesService.put(fileData);
+  }
+
+  _calculateDecimalCoordinate(data, ref) {
+    let decimal = data[0] + data[1] / 60 + data[2] / 3600;
+    if (ref === 'W' || ref === 'S') {
+      decimal *= -1;
     }
 
+    return decimal;
   }
 
   _request(url) {
