@@ -16,6 +16,8 @@ provider:
   environment:
     TABLE_NAME: ${file(./serverless.env.yml):dev.SLACK_TABLE_NAME}
     USER_SETTINGS_TABLE_NAME: ${file(./serverless.env.yml):dev.USER_SETTINGS_TABLE_NAME}
+    SLACK_VERIFICATION_TOKEN: ${file(./serverless.env.yml):dev.SLACK_VERIFICATION_TOKEN}
+    OAUTH_ACCESS_TOKEN: ${file(./serverless.env.yml):dev.OAUTH_ACCESS_TOKEN}
 
   iamRoleStatements:
     - Effect: Allow
@@ -38,38 +40,38 @@ functions:
           method: post
           integration: lambda
 
-resources:
-  Resources:
-    TeamsDynamoDbTable:
-      Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Retain
-      Properties:
-        AttributeDefinitions:
-          -
-            AttributeName: id
-            AttributeType: S
-        KeySchema:
-          -
-            AttributeName: id
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        TableName: ${file(./serverless.env.yml):dev.SLACK_TABLE_NAME}
-
-    UserSettingsDynamoDBTable:
-      Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Retain
-      Properties:
-        AttributeDefinitions:
-          -
-            AttributeName: id
-            AttributeType: S
-        KeySchema:
-          -
-            AttributeName: id
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        TableName: ${file(./serverless.env.yml):dev.USER_SETTINGS_TABLE_NAME}
+#resources:
+#  Resources:
+#    TeamsDynamoDbTable:
+#      Type: 'AWS::DynamoDB::Table'
+#      DeletionPolicy: Retain
+#      Properties:
+#        AttributeDefinitions:
+#          -
+#            AttributeName: id
+#            AttributeType: S
+#        KeySchema:
+#          -
+#            AttributeName: id
+#            KeyType: HASH
+#        ProvisionedThroughput:
+#          ReadCapacityUnits: 1
+#          WriteCapacityUnits: 1
+#        TableName: ${file(./serverless.env.yml):dev.SLACK_TABLE_NAME}
+#
+#    UserSettingsDynamoDBTable:
+#      Type: 'AWS::DynamoDB::Table'
+#      DeletionPolicy: Retain
+#      Properties:
+#        AttributeDefinitions:
+#          -
+#            AttributeName: id
+#            AttributeType: S
+#        KeySchema:
+#          -
+#            AttributeName: id
+#            KeyType: HASH
+#        ProvisionedThroughput:
+#          ReadCapacityUnits: 1
+#          WriteCapacityUnits: 1
+#        TableName: ${file(./serverless.env.yml):dev.USER_SETTINGS_TABLE_NAME}
