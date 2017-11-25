@@ -4,6 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "eslint": "./node_modules/.bin/eslint src/**/*.js --fix",
+    "build": "rm -fr build && babel ./src -d build",
+    "deploy": "npm run build && serverless deploy",
+    "codedeploy": "npm run build && serverless deploy function -f slack",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -23,6 +27,7 @@
     "babel-plugin-transform-runtime": "^6.23.0",
     "babel-preset-es2015": "^6.24.1",
     "babel-preset-stage-3": "^6.24.1",
+    "eslint": "^4.11.0",
     "serverless-webpack": "^4.1.0",
     "webpack": "^3.8.1",
     "webpack-node-externals": "^1.6.0"

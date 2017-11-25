@@ -1,25 +1,56 @@
 service: slack-photo-map
 
-# Use serverless-webpack plugin to transpile ES6/ES7
 plugins:
   - serverless-webpack
 
-# Enable auto-packing of external modules
 custom:
   webpackIncludeModules: true
 
 provider:
   name: aws
   runtime: nodejs6.10
-
   stage: dev
   region: us-west-2
-
-  iamRoleStatements:
+  versionFunctions: false
 
   environment:
+    USER_SETTINGS_TABLE_NAME: ${file(./serverless.env.yml):dev.USER_SETTINGS_TABLE_NAME}
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:DescribeTable
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:us-west-2:*:*"
 
 functions:
+  slack:
+    handler: src/slack.handler
+    events:
+      - http:
+          path: slack
+          method: post
 
 resources:
   Resources:
+    UserSettingsDynamoDBTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: id
+            AttributeType: S
+        KeySchema:
+          -
+            AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${file(./serverless.env.yml):dev.USER_SETTINGS_TABLE_NAME}
