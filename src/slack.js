@@ -9,7 +9,9 @@ const usersService = new DynamoDBService(dynamoDbClient, process.env.USER_SETTIN
 const filesService = new DynamoDBService(dynamoDbClient, process.env.FILES_TABLE_NAME);
 
 import FileSharedCommand from './commands/FileSharedCommand';
+import FileUnsharedCommand from './commands/FileUnsharedCommand';
 
 new FileSharedCommand(slack, usersService, filesService);
+new FileUnsharedCommand(slack, filesService);
 
 export const handler = slack.handler.bind(slack);
