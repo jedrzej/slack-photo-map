@@ -1,16 +1,23 @@
 'use strict';
 
-module.exports.hello = (event, context, callback) => {
+import AWS from 'aws-sdk';
+import DynamoDBService from './services/DynamoDBService';
+
+const dynamoDbClient = new AWS.DynamoDB.DocumentClient();
+const filesService = new DynamoDBService(dynamoDbClient, process.env.FILES_TABLE_NAME);
+
+export async function main(event, context, callback) {
+  const files = await filesService.index();
+
   const response = {
     statusCode: 200,
-    body: JSON.stringify({
-      message: 'Go Serverless v1.0! Your function executed successfully!',
-      input: event,
-    }),
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Credentials": true
+    },
+    body: JSON.stringify(files)
   };
 
   callback(null, response);
+}
 
-  // Use this code if you don't use the http event with the LAMBDA-PROXY integration
-  // Callback(null, { message: 'Go Serverless v1.0! Your function executed successfully!', event });
-};

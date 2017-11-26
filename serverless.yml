@@ -41,6 +41,15 @@ functions:
           method: post
           integration: lambda
 
+  index:
+    handler: src/index.main
+    events:
+      - http:
+          path: files
+          method: get
+          cors: true
+          authorizer: aws_iam
+
 resources:
   Resources:
     TeamsDynamoDbTable:
