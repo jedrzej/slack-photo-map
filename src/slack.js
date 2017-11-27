@@ -5,7 +5,7 @@ import DynamoDBService from './services/DynamoDBService';
 import slack from "serverless-slack";
 
 const dynamoDbClient = new AWS.DynamoDB.DocumentClient();
-const usersService = new DynamoDBService(dynamoDbClient, process.env.USER_SETTINGS_TABLE_NAME);
+const usersService = new DynamoDBService(dynamoDbClient, process.env.USERS_TABLE_NAME);
 const filesService = new DynamoDBService(dynamoDbClient, process.env.FILES_TABLE_NAME);
 
 import FileSharedCommand from './commands/FileSharedCommand';

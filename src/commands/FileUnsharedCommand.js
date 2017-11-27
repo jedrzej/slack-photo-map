@@ -12,6 +12,11 @@ export default class {
         return;
       }
 
+      if (payload.token !== process.env.SLACK_VERIFICATION_TOKEN) {
+        console.error('Forbidden');
+        return;
+      }
+
       console.log('Processing payload', payload);
 
       if (await this.filesService.get(payload.event.file_id)) {
