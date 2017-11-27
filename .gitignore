@@ -10,6 +10,7 @@ jspm_packages
 
 # Build files
 .webpack
+build
 
 # Configuration
 serverless.env.yml

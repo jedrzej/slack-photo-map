@@ -34,7 +34,7 @@ provider:
 
 functions:
   slack:
-    handler: src/slack.handler
+    handler: build/slack.handler
     events:
       - http:
           path: slack
@@ -42,7 +42,7 @@ functions:
           integration: lambda
 
   index:
-    handler: src/index.main
+    handler: build/index.main
     events:
       - http:
           path: files
