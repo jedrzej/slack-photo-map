@@ -3,30 +3,33 @@
 import request from 'request';
 import {ExifImage} from 'exif';
 import moment from 'moment';
+import Logger from '../utils/Logger';
 
 export default class {
   constructor(slack, usersService, filesService) {
     this.usersService = usersService;
     this.filesService = filesService;
+    this.logger = new Logger('FileSharedCommand');
 
     slack.on('event', async (payload, client) => {
       this.client = client;
 
-      console.log('Received event', payload.event.type);
+      this.logger.log('Received event', payload.event.type);
       if (payload.event.type !== 'file_shared') {
+        this.logger.log('Unsupported event');
         return;
       }
 
       if (payload.token !== process.env.SLACK_VERIFICATION_TOKEN) {
-        console.error('Forbidden');
+        this.logger.error('Forbidden');
         return;
       }
 
-      console.log('Processing payload', payload);
+      this.logger.log('Processing payload', payload);
       const userData = await this.ensureUserExists(payload.event.user_id);
       const file = await this.getFile(payload.event.file_id);
       if (file.file.mimetype !== 'image/jpeg') {
-        console.log('Unsupported mime type', file.file.mimetype);
+        this.logger.log('Unsupported mime type', file.file.mimetype);
         return;
       }
 
@@ -35,16 +38,16 @@ export default class {
       if (this.hasRequiredData(exifData)) {
         this.storeFile(file, exifData, userData);
       } else {
-        console.log('Required EXIF data is missing')
+        this.logger.log('Required EXIF data is missing')
       }
     });
   }
 
   async ensureUserExists(userId) {
-    console.log('Loading user', userId);
+    this.logger.log('Loading user', userId);
     const user = await this.usersService.get(userId);
     if (!user) {
-      console.log('User does not exist');
+      this.logger.log('User does not exist');
 
       let user;
       try {
@@ -53,11 +56,11 @@ export default class {
           user: userId
         });
       } catch (e) {
-        console.error('Unable to fetch user', e);
+        this.logger.error('Unable to fetch user', e);
         throw e;
       }
 
-      console.log('Loaded user data', user);
+      this.logger.log('Loaded user data', user);
 
       const userData = {
         id: userId,
@@ -65,7 +68,7 @@ export default class {
         fullName: user.user.real_name
       };
 
-      console.log('Saving user data', userData);
+      this.logger.log('Saving user data', userData);
       await this.usersService.put(userData);
 
       return userData;
@@ -75,16 +78,16 @@ export default class {
   }
 
   async getFile(fileId) {
-    console.log('Loading file', fileId);
+    this.logger.log('Loading file', fileId);
     let file;
     try {
       file = await this.client.send('files.info', {
         token: process.env.OAUTH_ACCESS_TOKEN,
         file: fileId
       });
-      console.log('Loaded file data', file);
+      this.logger.log('Loaded file data', file);
     } catch (e) {
-      console.error('Unable to fetch file', e);
+      this.logger.error('Unable to fetch file', e);
       throw e;
     }
 
@@ -93,23 +96,25 @@ export default class {
 
   async loadFileContent(file) {
     try {
-      console.log('Downloading file from', file.file.url_private);
-      return await this._request(file.file.url_private);
+      this.logger.log('Downloading file from', file.file.url_private);
+      const buffer = await this._request(file.file.url_private);
+      this.logger.log('File downloaded');
+      return buffer;
     } catch (e) {
-      console.error('Unable to download file', e);
+      this.logger.error('Unable to download file', e);
       throw e;
     }
   }
 
   loadExifData(buffer) {
+    const logger = this.logger;
     return new Promise(function (resolve, reject) {
-      console.log('Loading EXIF data');
       new ExifImage({image: buffer}, function (error, exifData) {
         if (error) {
-          console.error('Unable to load EXIF data', e);
+          logger.error('Unable to load EXIF data', e);
           reject(error);
         } else {
-          console.log('Loaded EXIF data', exifData);
+          logger.log('Loaded EXIF data', exifData);
           resolve(exifData);
         }
       });
@@ -134,7 +139,7 @@ export default class {
       user
     };
 
-    console.log('Saving file ', fileData);
+    this.logger.log('Saving file ', fileData);
     return this.filesService.put(fileData);
   }
 
