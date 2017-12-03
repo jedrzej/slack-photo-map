@@ -7,7 +7,10 @@ const dynamoDbClient = new AWS.DynamoDB.DocumentClient();
 const filesService = new DynamoDBService(dynamoDbClient, process.env.FILES_TABLE_NAME);
 
 export async function main(event, context, callback) {
-  const files = await filesService.index();
+  const files = await filesService.index({
+    FilterExpression: 'user.isAllowed = :isAllowed',
+    ExpressionAttributeValues: {':isAllowed': true}
+  });
 
   const response = {
     statusCode: 200,

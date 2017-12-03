@@ -5,113 +5,219 @@ import {ExifImage} from 'exif';
 import moment from 'moment';
 import Logger from '../utils/Logger';
 
+const logger = new Logger('FileSharedCommand');
+
 export default class {
   constructor(slack, usersService, filesService) {
     this.usersService = usersService;
     this.filesService = filesService;
-    this.logger = new Logger('FileSharedCommand');
 
     slack.on('event', async (payload, client) => {
+      if (payload.token !== process.env.SLACK_VERIFICATION_TOKEN) {
+        logger.log('Forbidden');
+        return;
+      }
+
       this.client = client;
 
-      this.logger.log('Received event', payload.event.type);
-      if (payload.event.type !== 'file_shared') {
-        this.logger.log('Unsupported event');
-        return;
+      try {
+        await this.handleEvent(payload)
+      } catch (e) {
+        logger.log('ERROR', e.message);
       }
+    });
 
+    slack.on('*', (payload, client) => {
       if (payload.token !== process.env.SLACK_VERIFICATION_TOKEN) {
-        this.logger.error('Forbidden');
+        logger.log('Forbidden');
         return;
       }
 
-      this.logger.log('Processing payload', payload);
-      const userData = await this.ensureUserExists(payload.event.user_id);
-      const file = await this.getFile(payload.event.file_id);
-      if (file.file.mimetype !== 'image/jpeg') {
-        this.logger.log('Unsupported mime type', file.file.mimetype);
-        return;
-      }
+      this.client = client;
 
-      const buffer = await this.loadFileContent(file);
-      const exifData = await this.loadExifData(buffer);
-      if (this.hasRequiredData(exifData)) {
-        this.storeFile(file, exifData, userData);
-      } else {
-        this.logger.log('Required EXIF data is missing')
+      try {
+        this.handleResponse(payload)
+      } catch (e) {
+        logger.log('ERROR', e.message);
       }
     });
   }
 
-  async ensureUserExists(userId) {
-    this.logger.log('Loading user', userId);
-    const user = await this.usersService.get(userId);
-    if (!user) {
-      this.logger.log('User does not exist');
+  async handleEvent(payload) {
+    logger.log('Received event', payload.event.type);
 
-      let user;
+    if (payload.event.type !== 'file_shared') {
+      logger.log('Unsupported event');
+      return;
+    }
+
+    logger.log('Processing payload', payload);
+
+    const user = await this.ensureUserExists(payload.event.user_id);
+    if (user.ignoreFilesShared) {
+      logger.log('User disabled uploading files');
+      return;
+    }
+
+    const file = await this.getFile(payload.event.file_id);
+    if (file.file.mimetype !== 'image/jpeg') {
+      logger.log('Unsupported mime type', file.file.mimetype);
+      return;
+    }
+
+    const buffer = await this.loadFileContent(file);
+    const exifData = await this.loadExifData(buffer);
+    if (!this.hasRequiredData(exifData)) {
+      logger.log('Required EXIF data is missing')
+      return;
+    }
+
+    await this.storeFile(file, exifData, user);
+
+    const message = this.createConfirmationMessage(file.file);
+    logger.log('SENDING', message);
+
+    message.channel = file.file.channels && file.file.channels.length ? file.file.channels[0] : payload.event.user_id;
+    message.token = process.env.OAUTH_ACCESS_TOKEN;
+
+    logger.log('SENDING', message);
+
+    this.client.send('chat.postMessage', message).catch((e) => {throw new Error(e.error)});
+  }
+
+  async handleResponse(payload) {
+    if (payload.type === 'interactive_message' && payload.actions.length) {
+      if (payload.actions[0].name === 'allow') {
+        await this.allowOnMap(payload.callback_id);
+        this.client.replyPrivate('Your file got added to the map.');
+      } else if (payload.actions[0].name === 'disallow') {
+        await this.deleteFile(payload.callback_id);
+        this.client.replyPrivate('Your file got discarded.');
+      } else if (payload.actions[0].name === 'disallow_forever') {
+        await Promise.all([
+          this.deleteFile(payload.callback_id),
+          this.disallowForever(payload.user.id)
+        ]);
+        this.client.replyPrivate('Your file got discarded. You\'ll never be bothered again.');
+      }
+    }
+  }
+
+  createConfirmationMessage(file) {
+    return {
+      text: 'Do you want to show the image you just uploaded on your team\'s map?',
+      attachments: JSON.stringify([
+        {
+          callback_id: file.id,
+          fallback: file.id,
+          color: 'good',
+          actions: [
+            {
+              name: 'allow',
+              text: 'Yes',
+              type: 'button',
+              value: file.id,
+              style: 'good'
+            },
+            {
+              name: 'disallow',
+              text: 'No',
+              type: 'button',
+              value: file.id,
+              style: 'warning'
+            },
+            {
+              name: 'disallow_forever',
+              text: 'No. Don\'t ask again.',
+              type: 'button',
+              value: file.id,
+              style: 'danger'
+            }
+          ]
+        }
+      ])
+    };
+  }
+
+  disallowForever(userId) {
+    return this.usersService.update(userId, 'SET ignoreFilesShared = :ignoreFilesShared', {':ignoreFilesShared': true});
+  }
+
+  deleteFile(fileId) {
+    return this.filesService.delete(fileId);
+  }
+
+  allowOnMap(fileId) {
+    return this.filesService.update(fileId, 'SET isAllowed = :isAllowed', {':isAllowed': true});
+  }
+
+  async ensureUserExists(userId) {
+    logger.log('Loading user', userId);
+
+    let user = await this.usersService.get(userId);
+    if (!user) {
+      logger.log('User does not exist');
+
+      let slackUser;
       try {
-        user = await this.client.send('users.info', {
+        slackUser = await this.client.send('users.info', {
           token: process.env.OAUTH_ACCESS_TOKEN,
           user: userId
         });
       } catch (e) {
-        this.logger.error('Unable to fetch user', e);
+        logger.log('Unable to fetch user', e);
         throw e;
       }
 
-      this.logger.log('Loaded user data', user);
+      logger.log('Loaded user data', user);
 
-      const userData = {
+      user = {
         id: userId,
-        username: user.user.name,
-        fullName: user.user.real_name
+        username: slackUser.user.name,
+        fullName: slackUser.user.real_name,
+        ignoreFilesShared: false
       };
 
-      this.logger.log('Saving user data', userData);
-      await this.usersService.put(userData);
-
-      return userData;
+      logger.log('Saving user data', user);
+      await this.usersService.put(user);
     }
 
     return user;
   }
 
   async getFile(fileId) {
-    this.logger.log('Loading file', fileId);
-    let file;
+    logger.log('Loading file', fileId);
+
     try {
-      file = await this.client.send('files.info', {
+      const file = await this.client.send('files.info', {
         token: process.env.OAUTH_ACCESS_TOKEN,
         file: fileId
       });
-      this.logger.log('Loaded file data', file);
+      logger.log('Loaded file data', file);
+      return file;
     } catch (e) {
-      this.logger.error('Unable to fetch file', e);
+      logger.log('Unable to fetch file', e);
       throw e;
     }
-
-    return file;
   }
 
   async loadFileContent(file) {
     try {
-      this.logger.log('Downloading file from', file.file.url_private);
+      logger.log('Downloading file from', file.file.url_private);
       const buffer = await this._request(file.file.url_private);
-      this.logger.log('File downloaded');
+      logger.log('File downloaded');
       return buffer;
     } catch (e) {
-      this.logger.error('Unable to download file', e);
+      logger.log('Unable to download file', e);
       throw e;
     }
   }
 
   loadExifData(buffer) {
-    const logger = this.logger;
     return new Promise(function (resolve, reject) {
       new ExifImage({image: buffer}, function (error, exifData) {
         if (error) {
-          logger.error('Unable to load EXIF data', e);
+          logger.log('Unable to load EXIF data', error);
           reject(error);
         } else {
           logger.log('Loaded EXIF data', exifData);
@@ -125,7 +231,7 @@ export default class {
     return exifData.exif.CreateDate && exifData.gps.GPSLatitudeRef;
   }
 
-  storeFile(file, exifData, user) {
+  storeFile(file, exifData, user, isAllowedOnMap) {
     let lat = this._calculateDecimalCoordinate(exifData.gps.GPSLatitude, exifData.gps.GPSLatitudeRef);
     let lng = this._calculateDecimalCoordinate(exifData.gps.GPSLongitude, exifData.gps.GPSLongitudeRef);
 
@@ -136,10 +242,11 @@ export default class {
       createdAt: moment(exifData.exif.CreateDate, "YYYY:MM:DD").format('YYYY-MM-DD'),
       lat,
       lng,
-      user
+      user,
+      isAllowed: !!isAllowedOnMap
     };
 
-    this.logger.log('Saving file ', fileData);
+    logger.log('Saving file ', fileData);
     return this.filesService.put(fileData);
   }
 

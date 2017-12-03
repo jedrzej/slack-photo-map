@@ -65,8 +65,8 @@ resources:
             AttributeName: id
             KeyType: HASH
         ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
         TableName: ${file(./serverless.env.yml):dev.SLACK_TABLE_NAME}
 
     UserSettingsDynamoDBTable:
@@ -82,8 +82,8 @@ resources:
             AttributeName: id
             KeyType: HASH
         ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
         TableName: ${file(./serverless.env.yml):dev.USERS_TABLE_NAME}
 
     FilesDynamoDBTable:
@@ -99,6 +99,6 @@ resources:
             AttributeName: id
             KeyType: HASH
         ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
         TableName: ${file(./serverless.env.yml):dev.FILES_TABLE_NAME}
